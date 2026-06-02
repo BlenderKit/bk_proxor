@@ -411,10 +411,7 @@ def _allocate_samples_by_area(
     if cached_areas is not None:
         areas = [max(a, 0.0) for a in cached_areas]
     else:
-        areas = [
-            max(_estimate_object_surface_area(src, depsgraph), 0.0)
-            for src, _ in sources
-        ]
+        areas = [max(_estimate_object_surface_area(src, depsgraph), 0.0) for src, _ in sources]
     total_area = sum(areas)
     if total_area <= 0.0:
         areas = [1.0 for _ in sources]
@@ -450,9 +447,7 @@ def _allocate_samples_by_area(
 # ===========================================================================
 
 
-def _find_tex_image_upstream(
-    node, visited: Optional[set] = None
-) -> "Optional[bpy.types.Image]":
+def _find_tex_image_upstream(node, visited: Optional[set] = None) -> "Optional[bpy.types.Image]":
     """Recursively walk upstream from *node* to find the first TEX_IMAGE."""
     if visited is None:
         visited = set()
@@ -603,9 +598,7 @@ def _fast_grid_sample(
     base_side = max(int(round(count**exponent)), 1)
 
     # Scale each axis proportionally so cells stay roughly cubic in world space.
-    cells_per_axis = np.maximum(
-        np.round(extent / extent.max() * base_side).astype(np.int32), 1
-    )
+    cells_per_axis = np.maximum(np.round(extent / extent.max() * base_side).astype(np.int32), 1)
     cell_size = extent / cells_per_axis  # per-axis cell dimensions
 
     # --- 4. Assign each vertex to a cell ---
@@ -685,9 +678,7 @@ def _sample_uniform_surface_points(
         # - Vertex count exceeds threshold (default 50k), OR
         # - Triangle count > 500k (dense mesh even if vertex count is lower)
         if n_verts >= HIGHPOLY_VERT_THRESHOLD or n_tris > 500_000:
-            return _fast_grid_sample(
-                obj_eval, mesh, count, include_normals=include_normals
-            )
+            return _fast_grid_sample(obj_eval, mesh, count, include_normals=include_normals)
 
         loop_tris = getattr(mesh, "loop_triangles", [])
         if not loop_tris:
@@ -738,9 +729,7 @@ def _sample_uniform_surface_points(
 
             total_area += area
             cumulative.append(total_area)
-            triangles_local.append(
-                (corners_local[0], corners_local[1], corners_local[2])
-            )
+            triangles_local.append((corners_local[0], corners_local[1], corners_local[2]))
             triangle_normals.append(normal_local)
 
             # Store per-triangle UVs for interpolation
@@ -780,22 +769,12 @@ def _sample_uniform_surface_points(
             samples.append([float(point.x), float(point.y), float(point.z)])
             if include_normals and triangle_normals:
                 normal_vec = triangle_normals[tri_index]
-                normals_out.append(
-                    [float(normal_vec.x), float(normal_vec.y), float(normal_vec.z)]
-                )
-            if (
-                include_colors
-                and px_cache is not None
-                and tri_index < len(triangle_uvs)
-            ):
+                normals_out.append([float(normal_vec.x), float(normal_vec.y), float(normal_vec.z)])
+            if include_colors and px_cache is not None and tri_index < len(triangle_uvs):
                 tri_uv = triangle_uvs[tri_index]
                 if tri_uv is not None:
-                    u, v = _interpolate_uv(
-                        tri_uv[0], tri_uv[1], tri_uv[2], bary_u, bary_v, bary_w
-                    )
-                    colors_out.append(
-                        _sample_texture_at_uv(px_cache, tex_w, tex_h, u, v)
-                    )
+                    u, v = _interpolate_uv(tri_uv[0], tri_uv[1], tri_uv[2], bary_u, bary_v, bary_w)
+                    colors_out.append(_sample_texture_at_uv(px_cache, tex_w, tex_h, u, v))
                 else:
                     colors_out.append([0.8, 0.8, 0.8, 1.0])
         return samples, normals_out, colors_out
@@ -809,9 +788,7 @@ def _sample_uniform_surface_points(
 # ===========================================================================
 
 
-def _apply_transform_to_vectors(
-    vectors: Optional[list[list[float]]], matrix: Optional[Matrix]
-) -> None:
+def _apply_transform_to_vectors(vectors: Optional[list[list[float]]], matrix: Optional[Matrix]) -> None:
     if not vectors or matrix is None:
         return
     for idx, vec in enumerate(vectors):
@@ -826,9 +803,7 @@ def _apply_transform_to_vectors(
         ]
 
 
-def _apply_transform_to_payload(
-    payload: Optional[dict], matrix: Optional[Matrix]
-) -> None:
+def _apply_transform_to_payload(payload: Optional[dict], matrix: Optional[Matrix]) -> None:
     if not payload or matrix is None:
         return
     proxor_data = payload.get("data") if isinstance(payload, dict) else None
@@ -907,9 +882,7 @@ def _build_combined_world_mesh(sources: list[tuple], depsgraph):
         src_mesh = None
         try:
             obj_eval = src_obj.evaluated_get(depsgraph)
-            src_mesh = obj_eval.to_mesh(
-                preserve_all_data_layers=False, depsgraph=depsgraph
-            )
+            src_mesh = obj_eval.to_mesh(preserve_all_data_layers=False, depsgraph=depsgraph)
         except Exception:  # noqa: BLE001
             src_mesh = None
         if src_mesh is None:
@@ -927,9 +900,7 @@ def _build_combined_world_mesh(sources: list[tuple], depsgraph):
                 co3 = co.reshape(n_verts, 3)
                 mat = np.array(transform, dtype=np.float32)
                 co_world = co3 @ mat[:3, :3].T + mat[:3, 3]
-                src_mesh.vertices.foreach_set(
-                    "co", co_world.reshape(-1).astype(np.float32)
-                )
+                src_mesh.vertices.foreach_set("co", co_world.reshape(-1).astype(np.float32))
             if n_verts > 0:
                 bm.from_mesh(src_mesh)
                 any_geometry = True
@@ -1008,14 +979,10 @@ def _transform_point_list(
         transformed_points.append([float(vec.x), float(vec.y), float(vec.z)])
     if normals and normal_matrix is not None:
         for normal in normals:
-            norm_vec = normal_matrix @ Vector(
-                (float(normal[0]), float(normal[1]), float(normal[2]))
-            )
+            norm_vec = normal_matrix @ Vector((float(normal[0]), float(normal[1]), float(normal[2])))
             if norm_vec.length_squared > 0:
                 norm_vec.normalize()
-            transformed_normals.append(
-                [float(norm_vec.x), float(norm_vec.y), float(norm_vec.z)]
-            )
+            transformed_normals.append([float(norm_vec.x), float(norm_vec.y), float(norm_vec.z)])
     elif normals:
         transformed_normals = [list(normal) for normal in normals]
     return transformed_points, transformed_normals
@@ -1122,9 +1089,7 @@ def _weld_close_vertices(
         return vertices, triangles
     inv_tol = 1.0 / max(tolerance, 1e-12)
     quantized = np.round(vertices * inv_tol).astype(np.int64)
-    _, inverse, counts = np.unique(
-        quantized, axis=0, return_inverse=True, return_counts=True
-    )
+    _, inverse, counts = np.unique(quantized, axis=0, return_inverse=True, return_counts=True)
     n_unique = len(counts)
     new_verts = np.zeros((n_unique, 3), dtype=np.float64)
     np.add.at(new_verts, inverse, vertices.astype(np.float64))
@@ -1187,9 +1152,7 @@ def _surface_from_scalar_field(
         )
         if faces.size > 0:
             verts_world = verts + grid_min + center_offset
-            tris = [
-                (int(face[0]), int(face[1]), int(face[2])) for face in faces.tolist()
-            ]
+            tris = [(int(face[0]), int(face[1]), int(face[2])) for face in faces.tolist()]
             return verts_world, tris
     except Exception:  # noqa: BLE001, S110
         pass  # Fall through to marching tetrahedra fallback
@@ -1306,9 +1269,7 @@ def _build_marching_tetrahedra_mesh(
                                 vals[ip],
                                 vals[outside_ids[2]],
                             )
-                            triangles.append(
-                                (_vertex_id(p0), _vertex_id(p1), _vertex_id(p2))
-                            )
+                            triangles.append((_vertex_id(p0), _vertex_id(p1), _vertex_id(p2)))
                         else:
                             op = inside.index(False)
                             inside_ids = [x for x in range(4) if x != op]
@@ -1330,9 +1291,7 @@ def _build_marching_tetrahedra_mesh(
                                 vals[op],
                                 vals[inside_ids[2]],
                             )
-                            triangles.append(
-                                (_vertex_id(p0), _vertex_id(p2), _vertex_id(p1))
-                            )
+                            triangles.append((_vertex_id(p0), _vertex_id(p2), _vertex_id(p1)))
                         continue
 
                     in_ids = [x for x, s in enumerate(inside) if s]
@@ -1361,12 +1320,8 @@ def _build_marching_tetrahedra_mesh(
                         vals[in_ids[1]],
                         vals[out_ids[1]],
                     )
-                    triangles.append(
-                        (_vertex_id(p00), _vertex_id(p01), _vertex_id(p10))
-                    )
-                    triangles.append(
-                        (_vertex_id(p01), _vertex_id(p11), _vertex_id(p10))
-                    )
+                    triangles.append((_vertex_id(p00), _vertex_id(p01), _vertex_id(p10)))
+                    triangles.append((_vertex_id(p01), _vertex_id(p11), _vertex_id(p10)))
 
     if not vertices or not triangles:
         return np.zeros((0, 3), dtype=np.float64), []
@@ -1626,9 +1581,7 @@ def _smooth_and_snap_to_surface(
         if hit_normal is None:
             return False
         return (
-            (p[0] - nearest.x) * hit_normal.x
-            + (p[1] - nearest.y) * hit_normal.y
-            + (p[2] - nearest.z) * hit_normal.z
+            (p[0] - nearest.x) * hit_normal.x + (p[1] - nearest.y) * hit_normal.y + (p[2] - nearest.z) * hit_normal.z
         ) < 0.0
 
     for _iteration in range(iterations):
@@ -1640,9 +1593,7 @@ def _smooth_and_snap_to_surface(
 
             # -- (1) If already inside the source, snap out and lock. --
             origin = Vector(result[idx].tolist())
-            nearest, hit_normal, _face_idx, _dist = bvh_tree.find_nearest(
-                origin, _INSIDE_PROBE_DIST
-            )
+            nearest, hit_normal, _face_idx, _dist = bvh_tree.find_nearest(origin, _INSIDE_PROBE_DIST)
             if nearest is not None and _is_inside(result[idx], nearest, hit_normal):
                 result[idx] = [nearest.x, nearest.y, nearest.z]
                 locked[idx] = True
@@ -1670,9 +1621,7 @@ def _smooth_and_snap_to_surface(
                 )
             )
             try:
-                hit_loc, _hit_normal, _face_idx, _hit_dist = bvh_tree.ray_cast(
-                    origin, direction, delta_len
-                )
+                hit_loc, _hit_normal, _face_idx, _hit_dist = bvh_tree.ray_cast(origin, direction, delta_len)
             except Exception:  # noqa: BLE001
                 hit_loc = None
 
@@ -1697,9 +1646,7 @@ def _smooth_and_snap_to_surface(
             if locked[idx]:
                 continue
             origin = Vector(result[idx].tolist())
-            nearest, _hit_normal, _face_idx, _dist = bvh_tree.find_nearest(
-                origin, snap_distance
-            )
+            nearest, _hit_normal, _face_idx, _dist = bvh_tree.find_nearest(origin, snap_distance)
             if nearest is None:
                 continue
             result[idx] = [nearest.x, nearest.y, nearest.z]
@@ -2021,9 +1968,7 @@ def _build_cpu_marching_cubes_mesh(
         grid_max = pts.max(axis=0) + pad
 
     def _compute_dims(cell_size: float) -> np.ndarray:
-        return np.maximum(
-            4, np.ceil((grid_max - grid_min) / cell_size).astype(np.int32) + 3
-        )
+        return np.maximum(4, np.ceil((grid_max - grid_min) / cell_size).astype(np.int32) + 3)
 
     dims = _compute_dims(voxel_size)
     while int(np.prod(dims, dtype=np.int64)) > MARCHING_CUBES_MAX_GRID_CELLS:
@@ -2082,19 +2027,13 @@ def _build_cpu_marching_cubes_mesh(
     level = max(min_point_density * 0.75, 1e-4)
 
     # -- Extract iso-surface --
-    vertices_np, triangles = _surface_from_scalar_field(
-        density, grid_min, voxel_size, level
-    )
+    vertices_np, triangles = _surface_from_scalar_field(density, grid_min, voxel_size, level)
     if len(triangles) == 0:
         return {"pos": [], "col": [], "nrm": []}
 
     # -- Post-process mesh --
-    triangles = _fix_face_orientations(
-        vertices_np, triangles, density, grid_min, voxel_size
-    )
-    vertices_np, triangles = _weld_close_vertices(
-        vertices_np, triangles, voxel_size * 0.05
-    )
+    triangles = _fix_face_orientations(vertices_np, triangles, density, grid_min, voxel_size)
+    vertices_np, triangles = _weld_close_vertices(vertices_np, triangles, voxel_size * 0.05)
 
     if not triangles:
         return {"pos": [], "col": [], "nrm": []}
@@ -2112,16 +2051,12 @@ def _build_cpu_marching_cubes_mesh(
 
     # Decimate mesh
     if decimation_ratio < 1.0:
-        vertices_np, triangles = _decimate_mesh(
-            vertices_np, triangles, decimation_ratio
-        )
+        vertices_np, triangles = _decimate_mesh(vertices_np, triangles, decimation_ratio)
         if not triangles:
             return {"pos": [], "col": [], "nrm": []}
 
     # -- Convert indexed mesh to flat triangle list --
-    vertex_normals = _compute_vertex_normals_from_triangles(
-        np.array(vertices_np, dtype=np.float32), triangles
-    )
+    vertex_normals = _compute_vertex_normals_from_triangles(np.array(vertices_np, dtype=np.float32), triangles)
     rgb = [float(color[0]), float(color[1]), float(color[2])]
 
     # Build per-vertex color via closest-point transfer from sampled points
@@ -2254,14 +2189,10 @@ def generate_proxor(
                 MAX_POINT_COUNT,
             )
         else:
-            point_count = min(
-                max(total_verts // POINT_DIVISOR, MIN_POINT_COUNT), MAX_POINT_COUNT
-            )
+            point_count = min(max(total_verts // POINT_DIVISOR, MIN_POINT_COUNT), MAX_POINT_COUNT)
 
         # Allocate samples across sources by relative surface area (use cached areas)
-        allocations = _allocate_samples_by_area(
-            sources, point_count, depsgraph, cached_areas=per_source_areas
-        )
+        allocations = _allocate_samples_by_area(sources, point_count, depsgraph, cached_areas=per_source_areas)
 
         # Build BVH tree up front so we can (a) drop interior-facing samples
         # before they poison the MC density field and (b) reuse it later for
@@ -2284,9 +2215,7 @@ def generate_proxor(
             )
             if not samples:
                 continue
-            transformed_points, transformed_normals = _transform_point_list(
-                samples, normals, transform
-            )
+            transformed_points, transformed_normals = _transform_point_list(samples, normals, transform)
             aggregated_points.extend(transformed_points)
             aggregated_normals.extend(transformed_normals)
             aggregated_colors.extend(sampled_colors)
@@ -2297,26 +2226,20 @@ def generate_proxor(
         # Drop interior / back-facing samples so MC doesn't carve holes through
         # the outer skin where cavity shells are sparsely sampled.
         if _EXTERIOR_ONLY_DEFAULT and bvh_tree is not None and aggregated_normals:
-            aggregated_points, aggregated_normals, aggregated_colors = (
-                _filter_exterior_points(
-                    aggregated_points,
-                    aggregated_normals,
-                    aggregated_colors,
-                    bvh_tree,
-                )
+            aggregated_points, aggregated_normals, aggregated_colors = _filter_exterior_points(
+                aggregated_points,
+                aggregated_normals,
+                aggregated_colors,
+                bvh_tree,
             )
             if not aggregated_points:
                 return None
 
         color = _resolve_object_color(obj)
         point_colors = aggregated_colors if aggregated_colors else None
-        colors = _build_payload_point_colors(
-            len(aggregated_points), point_colors, color
-        )
+        colors = _build_payload_point_colors(len(aggregated_points), point_colors, color)
         raw_normals = aggregated_normals if include_normals else None
-        point_normals = _build_payload_point_normals(
-            len(aggregated_points), raw_normals
-        )
+        point_normals = _build_payload_point_normals(len(aggregated_points), raw_normals)
 
         points_section: dict = {"pos": aggregated_points, "col": colors}
         if point_normals:
@@ -2465,9 +2388,7 @@ def _generate_proxor_multi_from_sources(
             MAX_POINT_COUNT,
         )
     else:
-        point_count = min(
-            max(total_verts // POINT_DIVISOR, MIN_POINT_COUNT), MAX_POINT_COUNT
-        )
+        point_count = min(max(total_verts // POINT_DIVISOR, MIN_POINT_COUNT), MAX_POINT_COUNT)
 
     # Allocate samples across sources by relative surface area (use cached areas)
     allocations = _allocate_samples_by_area(
@@ -2492,9 +2413,7 @@ def _generate_proxor_multi_from_sources(
         )
         if not samples:
             continue
-        transformed_points, transformed_normals = _transform_point_list(
-            samples, normals, transform
-        )
+        transformed_points, transformed_normals = _transform_point_list(samples, normals, transform)
         aggregated_points.extend(transformed_points)
         aggregated_normals.extend(transformed_normals)
         aggregated_colors.extend(sampled_colors)
@@ -2503,10 +2422,8 @@ def _generate_proxor_multi_from_sources(
         return None
 
     if _EXTERIOR_ONLY_DEFAULT and bvh_tree is not None and aggregated_normals:
-        aggregated_points, aggregated_normals, aggregated_colors = (
-            _filter_exterior_points(
-                aggregated_points, aggregated_normals, aggregated_colors, bvh_tree
-            )
+        aggregated_points, aggregated_normals, aggregated_colors = _filter_exterior_points(
+            aggregated_points, aggregated_normals, aggregated_colors, bvh_tree
         )
         if not aggregated_points:
             return None
@@ -2594,9 +2511,7 @@ def _resolve_loop_color(
         px_cache, tex_w, tex_h = texture_cache
         if tex_w > 0 and tex_h > 0:
             uv = uv_layer.data[loop_idx].uv
-            return _sample_texture_at_uv(
-                px_cache, tex_w, tex_h, float(uv[0]), float(uv[1])
-            )
+            return _sample_texture_at_uv(px_cache, tex_w, tex_h, float(uv[0]), float(uv[1]))
     # Try legacy vertex_colors
     layer = getattr(getattr(mesh, "vertex_colors", None), "active", None)
     if layer and layer.data:
@@ -2608,11 +2523,7 @@ def _resolve_loop_color(
     color_attributes = getattr(mesh, "color_attributes", None)
     if color_attributes:
         attribute = getattr(color_attributes, "active", None)
-        if (
-            attribute
-            and attribute.domain == "CORNER"
-            and attribute.data_type in {"BYTE_COLOR", "FLOAT_COLOR"}
-        ):
+        if attribute and attribute.domain == "CORNER" and attribute.data_type in {"BYTE_COLOR", "FLOAT_COLOR"}:
             color = list(attribute.data[loop_idx].color[:RGBA_LEN])
             if len(color) < RGBA_LEN:
                 color.extend([1.0] * (RGBA_LEN - len(color)))
@@ -2634,7 +2545,7 @@ def _collect_direct_mesh_data(
     """Read triangle face data directly from a Blender mesh.
 
     Returns:
-        (positions, normals, colors) – flat lists with 3 entries per triangle.
+        (positions, normals, colors) - flat lists with 3 entries per triangle.
     """
     positions: list[list[float]] = []
     normals: list[list[float]] = []
@@ -2667,11 +2578,7 @@ def _collect_direct_mesh_data(
                 normals.append(list(transformed_normal))
 
             if include_colors:
-                colors.append(
-                    _resolve_loop_color(
-                        mesh, loop_idx, vertex_idx, uv_layer, texture_cache
-                    )
-                )
+                colors.append(_resolve_loop_color(mesh, loop_idx, vertex_idx, uv_layer, texture_cache))
 
     return positions, normals, colors
 
@@ -2683,12 +2590,9 @@ def _collect_direct_line_data(
     """Read edge wireframe data directly from a Blender mesh.
 
     Returns:
-        Flat list of positions – 2 entries per edge segment.
+        Flat list of positions - 2 entries per edge segment.
     """
-    vertex_positions = {
-        v.index: list((combined_matrix @ v.co.to_4d())[:VECTOR_LEN])
-        for v in mesh.vertices
-    }
+    vertex_positions = {v.index: list((combined_matrix @ v.co.to_4d())[:VECTOR_LEN]) for v in mesh.vertices}
     segments: list[list[float]] = []
     for edge in mesh.edges:
         v1, v2 = edge.vertices
@@ -2777,11 +2681,7 @@ def _generate_proxor_direct_from_sources(
 
     # Build line section (flat pairs of positions, uniform color)
     color = _resolve_object_color(color_root_obj)
-    line_col = (
-        [list(color[:VECTOR_LEN])] * (len(all_line_positions) // 2)
-        if all_line_positions
-        else []
-    )
+    line_col = [list(color[:VECTOR_LEN])] * (len(all_line_positions) // 2) if all_line_positions else []
     line_section: dict = {"pos": all_line_positions, "col": line_col}
 
     # Build empty points section (no sampling needed)
