@@ -130,7 +130,7 @@ fi
 # --- Move to repository root ---
 cd "${REPO_DIR}"
 
-PROJECT_NAME="bl_proxor"
+PROJECT_NAME="bk_proxor"
 PROJECT_DIR="${REPO_DIR}"
 REQUIREMENTS_FILE="${PROJECT_DIR}/pyproject.toml"
 

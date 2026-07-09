@@ -77,10 +77,10 @@ pdm self update
 cd /d %REPO_FOLDER%
 
 echo ----------------------------------------
-echo "Processing project: bl_proxor"
+echo "Processing project: bk_proxor"
 echo ----------------------------------------
 
-set "PROJECT_NAME=bl_proxor"
+set "PROJECT_NAME=bk_proxor"
 set "PROJECT_DIR=%REPO_FOLDER%"
 :: make PROJECT_DIR absolute
 for %%A in ("!PROJECT_DIR!") do set "PROJECT_DIR=%%~fA"

@@ -10,9 +10,9 @@ dev = [
     ##
     "numpy>=1.21.0,<2.0.0",
 
-    "bandit>=1.9.4", # code is currently invalid for bandit
-    "ruff>=0.15.6", # code is currently invalid for ruff
-    "pydoclint>=0.8.3", # code is currently invalid for pydoclint
+    "bandit>=1.9.4",
+    "ruff>=0.15.6",
+    "pydoclint>=0.8.3",
 ]
 
 [tool.ruff]
