@@ -1,36 +1,34 @@
-"""Maya-addon shim around the ``bk_proxor`` git submodule.
+"""Dev shim that makes the ``bk_proxor`` git submodule import-compatible.
 
-The submodule itself follows a standard src-layout:
+Two on-disk layouts exist for the same package:
 
-    bk_maya/bk_proxor/        <- this folder = submodule root
-    ├── pyproject.toml
-    └── src/
-        └── bk_proxor/        <- real importable package
-            ├── __init__.py
-            ├── prx_format.py
-            ├── _blender/...
-            └── _maya/...
+* **Packaged addon** - ``dev.py`` copies ``bk_proxor/src/bk_proxor`` to
+  ``<addon>/bk_proxor``, so ``bk_proxor`` is a normal flat package and *this*
+  file is not shipped at all (it is replaced by the inner package ``__init__``).
+* **Hardlinked dev checkout** - the whole repo is linked as-is, so
+  ``<addon>/bk_proxor`` is this submodule root and the real package lives one
+  level down under ``src/bk_proxor``.
 
-To keep imports clean for both this addon AND any future DCC host that
-vendors the same submodule, we:
-
-1. Add ``<submodule>/src`` to ``sys.path`` so ``import bk_proxor`` Just
-   Works anywhere in the addon code, AND
-2. Re-export the inner package via *this* module so existing code that
-   does ``from bk_maya.bk_proxor import prx_format`` keeps working.
+To keep the exact same relative imports working in both layouts (e.g.
+``from .bk_proxor._blender import draw`` and ``from .bk_proxor import
+prx_format``), we point this package's ``__path__`` at the inner
+``src/bk_proxor`` directory when it exists. Submodules (``prx_format``,
+``_blender``, ``_maya``) are then resolved from there, so nothing needs to know
+about the ``src/`` nesting.
 """
 
 from __future__ import annotations
 
 import os
-import sys
 
-_SRC_DIR = os.path.join(os.path.dirname(__file__), "src")
-if os.path.isdir(_SRC_DIR) and _SRC_DIR not in sys.path:
-    sys.path.insert(0, _SRC_DIR)
+_INNER_PKG = os.path.join(os.path.dirname(__file__), "src", "bk_proxor")
+if os.path.isdir(_INNER_PKG):
+    # Redirect submodule resolution to the real src-layout package.
+    __path__ = [_INNER_PKG]
 
-# Re-export so ``bk_maya.bk_proxor.prx_format`` resolves without users
-# needing to know about the inner ``src/bk_proxor/`` layout.
-from bk_proxor import prx_format  # noqa: E402,F401
+# Re-export the DCC-agnostic format I/O so ``bk_proxor.prx_format`` resolves
+# regardless of layout. Imported after the __path__ redirect so it is found in
+# the inner package during dev.
+from . import prx_format  # noqa: E402,F401
 
 __all__ = ["prx_format"]
