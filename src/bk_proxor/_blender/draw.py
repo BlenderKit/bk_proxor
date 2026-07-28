@@ -266,33 +266,28 @@ def _create_mesh_blinn_shader_info():
     info.vertex_in(2, "VEC4", "vcol")
     info.push_constant("MAT4", "ModelViewProjectionMatrix")
     info.push_constant("MAT3", "NormalMatrix")
-    info.typedef_source(
-        """
+    info.typedef_source("""
         struct ProxorLightingData {
             vec4 light_dir;
             vec4 view_dir;
             vec4 shading_factors;
         };
-    """
-    )
+    """)
     info.uniform_buf(0, "ProxorLightingData", "LightingData")
     iface = gpu.types.GPUStageInterfaceInfo("v_iface")
     iface.smooth("VEC4", "vcol_out")
     iface.smooth("VEC3", "normal_out")
     info.vertex_out(iface)
     info.fragment_out(0, "VEC4", "fragColor")
-    info.vertex_source(
-        """
+    info.vertex_source("""
         void main() {
             vec3 normal_view = normalize(NormalMatrix * normal);
             vcol_out = vcol;
             normal_out = normal_view;
             gl_Position = ModelViewProjectionMatrix * vec4(pos, 1.0);
         }
-    """
-    )
-    info.fragment_source(
-        """
+    """)
+    info.fragment_source("""
         void main() {
             vec3 n = normalize(normal_out);
             vec3 light_dir = normalize(LightingData.light_dir.xyz);
@@ -309,8 +304,7 @@ def _create_mesh_blinn_shader_info():
             vec3 final_rgb = clamp(lit + specular, 0.0, 1.0);
             fragColor = vec4(final_rgb, vcol_out.a);
         }
-    """
-    )
+    """)
     return info
 
 
@@ -331,8 +325,7 @@ def _create_outline_shader_info():
     info.push_constant("FLOAT", "outlineWidth")
     info.push_constant("VEC4", "outlineColor")
     info.fragment_out(0, "VEC4", "fragColor")
-    info.vertex_source(
-        """
+    info.vertex_source("""
         void main() {
             vec4 clip_pos = ModelViewProjectionMatrix * vec4(pos, 1.0);
             // Project the normal into clip space XY to get expansion direction.
@@ -343,15 +336,12 @@ def _create_outline_shader_info():
             clip_pos.xy += n * outlineWidth * clip_pos.w;
             gl_Position = clip_pos;
         }
-    """
-    )
-    info.fragment_source(
-        """
+    """)
+    info.fragment_source("""
         void main() {
             fragColor = outlineColor;
         }
-    """
-    )
+    """)
     return info
 
 
@@ -564,9 +554,7 @@ class ProxorLiteDrawBuilder:
 
         # Apply vertical gradient (returns a new array, safe to mutate).
         if getattr(ctx, "use_gradient", True):
-            colors = _apply_vertical_gradient(
-                colors, verts[:, 2], getattr(ctx, "visibility_input", 100)
-            )
+            colors = _apply_vertical_gradient(colors, verts[:, 2], ctx.visibility_input)
 
         visibility = getattr(ctx, "mesh_visibility", 1.0)
         if visibility < 1.0:
@@ -649,7 +637,7 @@ class ProxorLiteDrawBuilder:
         if has_colors and point_colors is not None:
             if getattr(ctx, "use_gradient", True):
                 point_colors = _apply_vertical_gradient(
-                    point_colors, pts[:, 2], getattr(ctx, "visibility_input", 100)
+                    point_colors, pts[:, 2], ctx.visibility_input
                 )
             visibility = getattr(ctx, "point_visibility", 1.0)
             if visibility < 1.0:
@@ -719,6 +707,61 @@ class ProxorLiteDrawBuilder:
         )
         return {"batches": [batch], "shader": shader}
 
+    # -- forward arrow --
+
+    @staticmethod
+    def _collect_bounds(raw_data: dict, ctx, mesh_verts: Optional[np.ndarray]):
+        """Return ``(mins, maxs)`` of the proxor geometry, or ``None``.
+
+        Prefers the mesh verts (already transformed); otherwise falls back to
+        transforming the line/point positions so an arrow can still be placed.
+        """
+        arrays: list[np.ndarray] = []
+        if mesh_verts is not None and len(mesh_verts):
+            arrays.append(mesh_verts)
+        else:
+            for key in ("line", "points"):
+                section = raw_data.get(key)
+                if section:
+                    pts = _transform_positions(section.get("pos"), ctx.scale)
+                    if pts is not None and len(pts):
+                        arrays.append(pts)
+        if not arrays:
+            return None
+        mins = arrays[0].min(axis=0)
+        maxs = arrays[0].max(axis=0)
+        for arr in arrays[1:]:
+            mins = np.minimum(mins, arr.min(axis=0))
+            maxs = np.maximum(maxs, arr.max(axis=0))
+        return mins, maxs
+
+    @staticmethod
+    def _prepare_arrow_draw(bounds, ctx):
+        """Build a floor-level forward-pointing arrow batch (in -Y).
+
+        Mirrors the default green bounding-box arrow: two lines from the two
+        front-bottom corners to a tip in front of the shape at floor height.
+        """
+        if bounds is None:
+            return None
+        mins, maxs = bounds
+        min_x, min_y, min_z = float(mins[0]), float(mins[1]), float(mins[2])
+        max_x = float(maxs[0])
+        width = max_x - min_x
+        if width <= 0:
+            return None
+        center_x = (min_x + max_x) / 2.0
+        tip_y = min_y - width / 2.0
+        p_left = (min_x, min_y, min_z)
+        p_right = (max_x, min_y, min_z)
+        tip = (center_x, tip_y, min_z)
+        verts = np.array([p_left, tip, p_right, tip], dtype="f")
+        shader = _get_cached_shader("uniform_color")
+        if shader is None:
+            return None
+        batch = batch_for_shader(shader, "LINES", {"pos": verts})
+        return {"batch": batch, "shader": shader, "color": _resolve_arrow_color(ctx)}
+
     # -- public API --
 
     def build_draw_data(self, raw_data: dict, ctx) -> Optional[dict]:
@@ -740,7 +783,7 @@ class ProxorLiteDrawBuilder:
         mesh_verts: Optional[np.ndarray] = None
         mesh_normals: Optional[np.ndarray] = None
         want_mesh = getattr(ctx, "mesh_visibility", 1.0) > 0
-        want_outline = want_mesh and getattr(ctx, "use_outline", False)
+        want_outline = want_mesh and ctx.use_outline
         if (want_mesh or want_outline) and mesh_data:
             mesh_verts = _transform_positions(mesh_data.get("pos"), ctx.scale)
             if mesh_verts is not None:
@@ -768,6 +811,13 @@ class ProxorLiteDrawBuilder:
             outline = self._prepare_outline_draw(mesh_verts, mesh_normals)
             if outline:
                 draw["outline"] = outline
+
+        if ctx.show_arrow:
+            arrow = self._prepare_arrow_draw(
+                self._collect_bounds(raw_data, ctx, mesh_verts), ctx
+            )
+            if arrow:
+                draw["arrow"] = arrow
 
         text = self._prepare_text_draw(raw_data.get("text"), ctx)
         if text:
@@ -802,10 +852,53 @@ def default_draw_context(**overrides) -> SimpleNamespace:
         use_outline=False,
         outline_color=(1.0, 0.65, 0.0, 1.0),
         outline_width=0.004,
+        show_arrow=True,
+        arrow_color=None,
+        arrow_width=2.0,
     )
     for key, value in overrides.items():
         setattr(ctx, key, value)
     return ctx
+
+
+def _resolve_arrow_color(ctx) -> tuple:
+    """Pick the forward-arrow colour, falling back through ctx colour hints."""
+    color = getattr(ctx, "arrow_color", None)
+    if color is None:
+        color = getattr(ctx, "custom_color", None)
+    if color is None:
+        color = getattr(ctx, "outline_color", None)
+    if color is None:
+        color = (0.0, 1.0, 0.0, 1.0)
+    if len(color) == RGB_CHANNELS:
+        color = (*color, 1.0)
+    return tuple(float(c) for c in color)
+
+
+def draw_arrow_batch(arrow: Optional[dict], width: float = 2.0) -> None:
+    """Draw a prepared forward-arrow batch at the current GPU matrix.
+
+    The caller is responsible for pushing the world-space matrix (the arrow
+    verts are in the proxor's local, already axis-swapped space). Reusable by
+    any host that draws proxor data (viewport handler, download preview, etc.).
+    """
+    if not arrow:
+        return
+    shader = arrow.get("shader")
+    batch = arrow.get("batch")
+    if shader is None or batch is None:
+        return
+    gpu.state.depth_test_set("LESS_EQUAL")
+    gpu.state.blend_set("ALPHA")
+    with contextlib.suppress(Exception):
+        gpu.state.line_width_set(float(width))
+    shader.bind()
+    shader.uniform_float("color", arrow["color"])
+    batch.draw(shader)
+    with contextlib.suppress(Exception):
+        gpu.state.line_width_set(1.0)
+    gpu.state.blend_set("NONE")
+    gpu.state.depth_test_set("NONE")
 
 
 class ProxorLiteDrawHandler:
@@ -843,7 +936,7 @@ class ProxorLiteDrawHandler:
         """
         self._raw_data = proxor_data
         self._matrix = matrix or Matrix.Identity(4)
-        self._built_vis_pct = getattr(self.draw_ctx, "visibility_input", 100)
+        self._built_vis_pct = self.draw_ctx.visibility_input
         self._draw_data = (
             self._builder.build_draw_data(proxor_data, self.draw_ctx)
             if proxor_data
@@ -852,7 +945,7 @@ class ProxorLiteDrawHandler:
 
     def rebuild(self) -> None:
         """Rebuild GPU batches from cached raw data using current draw_ctx."""
-        self._built_vis_pct = getattr(self.draw_ctx, "visibility_input", 100)
+        self._built_vis_pct = self.draw_ctx.visibility_input
         if self._raw_data is not None:
             self._draw_data = self._builder.build_draw_data(
                 self._raw_data, self.draw_ctx
@@ -906,12 +999,12 @@ class ProxorLiteDrawHandler:
     def _draw_callback(self, _context):
         try:
             ctx = self.draw_ctx
-            vis_pct = getattr(ctx, "visibility_input", 100)
+            vis_pct = ctx.visibility_input
             if self._raw_data is not None and vis_pct != self._built_vis_pct:
                 self.rebuild()
             if self._draw_data is None:
                 return
-            if ctx.mesh_visibility > 0 and getattr(ctx, "use_outline", False):
+            if ctx.mesh_visibility > 0 and ctx.use_outline:
                 self._draw_outline()
             if ctx.mesh_visibility > 0:
                 self._draw_mesh()
@@ -919,6 +1012,8 @@ class ProxorLiteDrawHandler:
                 self._draw_lines()
             if ctx.point_visibility > 0 and ctx.point_size > 0:
                 self._draw_points()
+            if ctx.show_arrow:
+                self._draw_arrow()
         except Exception:  # noqa: BLE001
             # Prevent GPU errors or stale references from crashing Blender
             pass
@@ -979,6 +1074,14 @@ class ProxorLiteDrawHandler:
         gpu.state.depth_mask_set(False)
         gpu.state.depth_test_set("NONE")
         gpu.state.blend_set("NONE")
+
+    def _draw_arrow(self):
+        arrow = self._draw_data.get("arrow") if self._draw_data else None
+        if not arrow:
+            return
+        width = float(self.draw_ctx.arrow_width)
+        with self._push_matrix():
+            draw_arrow_batch(arrow, width)
 
     def _draw_outline(self):
         outline = self._draw_data.get("outline") if self._draw_data else None
