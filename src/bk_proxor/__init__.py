@@ -7,6 +7,7 @@ DCC-specific code lives under guarded subpackages:
   * ``bk_proxor._blender.draw``     - Blender GPU draw pipeline
   * ``bk_proxor._blender.generate`` - Blender mesh sampler
   * ``bk_proxor._maya.draw``        - Maya line-segment conversion
+  * ``bk_proxor._unreal.draw``      - Unreal line/mesh vertex conversion
 
 Each subpackage is imported lazily by the host plugin; missing host deps
 in one DCC never break the others.
