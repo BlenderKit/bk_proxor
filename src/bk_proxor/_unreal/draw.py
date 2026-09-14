@@ -10,7 +10,14 @@ Coordinate conversion mirrors ``bk_proxor._maya.draw``: PRX positions are
 Blender Z-up metres stored as ``raw * 100`` (see ``_PRX_TO_METRES``). Unreal
 is already Z-up (no Y/Z swap needed, unlike Maya), but is left-handed where
 Blender is right-handed, so the Y axis is mirrored. ``world_scale=100``
-converts metres to Unreal's internal centimetres.
+converts metres to Unreal's internal centimetres. On top of that mirror, a
+fixed -90 deg rotation about X is applied (confirmed against a real asset
+in-editor) - the raw PRX mesh's own "up" doesn't line up 1:1 with its bbox
+axes the way a plain Blender object-space AABB does, so this correction is
+proxor-specific and must NOT be applied to the (already-correct) asset bbox.
+This must happen HERE, before any bottom-center recentring downstream (see
+``placement._prepare_proxor_payload``) - applying it after recentring un-does
+the centring and was the cause of a previous "proxor invisible" regression.
 
 The default mirror-axis (``flip_y=True``) is the common Blender-export-to-
 Unreal convention (matches most glTF/FBX pipelines). It is exposed as a
@@ -20,14 +27,24 @@ in-editor preview turns out mirrored/rotated for this asset library's data.
 
 from __future__ import annotations
 
+import math
 from typing import Any, Optional
 
 _DEFAULT_SCALE = 100.0
 _PRX_TO_METRES = 0.01
+_BASIS_ROTATE_X_DEG = -90.0
+
+
+def _rotate_x(y: float, z: float, degrees: float) -> tuple[float, float]:
+    rad = math.radians(degrees)
+    cos_r, sin_r = math.cos(rad), math.sin(rad)
+    return y * cos_r - z * sin_r, y * sin_r + z * cos_r
 
 
 def _scaled(x: float, y: float, z: float, s: float, *, flip_y: bool) -> tuple[float, float, float]:
-    return (x * s, (-y if flip_y else y) * s, z * s)
+    x, y, z = x * s, (-y if flip_y else y) * s, z * s
+    y, z = _rotate_x(y, z, _BASIS_ROTATE_X_DEG)
+    return (x, y, z)
 
 
 def prx_to_line_segments(
@@ -137,7 +154,9 @@ def prx_to_mesh_normals(
             x, y, z = (float(v) for v in n[:3])
         except (TypeError, ValueError, IndexError):
             continue
-        out.append((x, -y if flip_y else y, z))
+        y = -y if flip_y else y
+        y, z = _rotate_x(y, z, _BASIS_ROTATE_X_DEG)
+        out.append((x, y, z))
     return out
 
 
